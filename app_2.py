@@ -22,7 +22,7 @@ st.set_page_config(page_title="Clinical Evidence Matrix", layout="wide")
 st.title("Clinical Literature Evidence Matrix")
 st.caption("Original-PDF-only extraction · Page-grounded quotes · Automated checks · Manual review")
 
-# Every requested metric has an explicit statistical definition. Customize here.
+# Every requested metric has an explicit statistical definition. Customize if needed.
 METRICS = {
     "Cohort Size": {
         "stat": "count", "terms": ["participants", "pregnancies", "cohort", "enrolled", "sample size"]
