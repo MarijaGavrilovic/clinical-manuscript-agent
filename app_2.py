@@ -637,25 +637,80 @@ if st.button("📊 Build evidence matrix"):
                 if truncated:
                     st.warning(f"{s.title}: only {chunk_limit} of {len(chunks)} text chunks processed. Increase the sidebar limit for fuller coverage.")
         df = pd.DataFrame(audit)
+
         if not df.empty:
-            # Summary is intentionally conservative: multiple candidates always require review.
+            # ====================================================
+            # EVIDENCE MATRIX
+            # ====================================================
+
             summaries = []
-            for (study, metric), group in df.groupby(["Study", "Metric"], sort=False):
-                passing = group[group["Validation"] == "QUOTE_MATCHED—REVIEW_CONTEXT"]
+
+            for (study, metric), group in df.groupby(
+                ["Study", "Metric"], sort=False
+            ):
+                passing = group[
+                    group["Validation"] == "QUOTE_MATCHED—REVIEW_CONTEXT"
+                ]
+
                 if len(passing) == 1 and len(group) == 1:
                     summary_value = passing.iloc[0]["Value"]
                     summary_status = "Quote matched; review context"
+
                 elif len(passing) > 0:
                     summary_value = "Multiple candidates — review"
                     summary_status = "Multiple candidates or mixed validations"
+
                 else:
                     summary_value = "Not established"
-                    summary_status = "; ".join(group["Validation"].unique())
-                summaries.append({"Study": study, "Metric": metric, "Result": summary_value, "Status": summary_status})
+                    summary_status = "; ".join(
+                        group["Validation"].unique()
+                    )
+
+                summaries.append({
+                    "Study": study,
+                    "Metric": metric,
+                    "Result": summary_value,
+                    "Status": summary_status
+                })
+
             summary = pd.DataFrame(summaries)
+
             st.subheader("Evidence matrix")
-            st.dataframe(summary.pivot(index="Study", columns="Metric", values="Result"), use_container_width=True)
-            for metric in selected_metrics:
+
+            st.dataframe(
+                summary.pivot(
+                    index="Study",
+                    columns="Metric",
+                    values="Result"
+                ),
+                use_container_width=True
+            )
+
+            # ====================================================
+            # EVIDENCE AUDIT: ONE ROW PER PUBLICATION
+            # ====================================================
+
+            st.subheader(
+                "Evidence audit (verify before clinical use)"
+            )
+
+            audit_wide = []
+
+            for (study, year, doi, source), group in df.groupby(
+                ["Study", "Year", "DOI", "Source"],
+                sort=False,
+                dropna=False
+            ):
+
+                row = {
+                    "Study": study,
+                    "Year": year,
+                    "DOI": doi,
+                    "Source": source,
+                    "Coverage": group.iloc[0]["Coverage"]
+                }
+
+                for metric in selected_metrics:
 
                     metric_data = group[
                         group["Metric"] == metric
@@ -667,7 +722,6 @@ if st.button("📊 Build evidence matrix"):
                         row[f"{metric} | Evidence"] = ""
                         continue
 
-                    # Only accept measurements with a matched source quote
                     valid = metric_data[
                         metric_data["Validation"]
                         == "QUOTE_MATCHED—REVIEW_CONTEXT"
@@ -682,7 +736,6 @@ if st.button("📊 Build evidence matrix"):
                     else:
                         row[metric] = "Not established"
 
-                    # Retain all validation statuses
                     row[f"{metric} | Validation"] = "; ".join(
                         metric_data["Validation"]
                         .dropna()
@@ -690,7 +743,6 @@ if st.button("📊 Build evidence matrix"):
                         .unique()
                     )
 
-                    # Retain all source quotations
                     row[f"{metric} | Evidence"] = " || ".join(
                         metric_data["Evidence Quote"]
                         .dropna()
@@ -699,6 +751,8 @@ if st.button("📊 Build evidence matrix"):
                         .unique()
                     )
 
+                # Must be outside the metric loop,
+                # but inside the publication loop
                 audit_wide.append(row)
 
             audit_wide_df = pd.DataFrame(audit_wide)
@@ -709,15 +763,28 @@ if st.button("📊 Build evidence matrix"):
                 hide_index=True
             )
 
+            # ====================================================
+            # CSV EXPORTS
+            # ====================================================
+
             st.download_button(
                 "Download evidence audit CSV",
-                audit_wide_df.to_csv(index=False).encode("utf-8-sig"),
+                audit_wide_df.to_csv(
+                    index=False
+                ).encode("utf-8-sig"),
                 "clinical_evidence_audit.csv",
                 "text/csv"
             )
 
-            st.download_button("Download summary CSV", summary.to_csv(index=False).encode("utf-8-sig"),
-                               "clinical_evidence_summary.csv", "text/csv")
+            st.download_button(
+                "Download summary CSV",
+                summary.to_csv(
+                    index=False
+                ).encode("utf-8-sig"),
+                "clinical_evidence_summary.csv",
+                "text/csv"
+            )
+
 
 st.divider()
 st.caption("Limitations: PubMed and Crossref provide publication metadata; accessible full text is retrieved from public PMC services only. Published metadata may contain name ambiguities; verify author identity. XML and PDF extraction can disrupt table layout. Quote matching validates text alignment, not scientific correctness. No paywall bypass or automatic 'verified' claims.")
