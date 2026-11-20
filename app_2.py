@@ -180,16 +180,27 @@ def pubmed_author_search(name, keywords, limit):
             last = a.findtext("LastName") or ""
             if last:
                 authors.append((first + " " + last).strip())
-        if len(parts) >= 2:
+ if len(parts) >= 2:
+            requested_first = parts[0].casefold()
             requested_last = parts[-1].casefold()
-            first = parts[0].casefold()
-            if not any(
-                a.casefold().split()[-1] == requested_last and
-                (a.casefold().split()[0] == first or
-                 a.casefold().split()[0][:1] == first[:1])
-                for a in authors if len(a.split()) >= 2
-            ):
+
+            def exact_author_match(author_name):
+                tokens = author_name.casefold().split()
+
+                if len(tokens) < 2:
+                    return False
+
+                actual_first = tokens[0]
+                actual_last = tokens[-1]
+
+                return (
+                    actual_first == requested_first
+                    and actual_last == requested_last
+                )
+
+            if not any(exact_author_match(a) for a in authors):
                 continue
+
         year = citation.findtext(".//PubDate/Year") or ""
         if not year:
             date = citation.findtext(".//PubDate/MedlineDate") or ""
@@ -644,10 +655,67 @@ if st.button("📊 Build evidence matrix"):
             summary = pd.DataFrame(summaries)
             st.subheader("Evidence matrix")
             st.dataframe(summary.pivot(index="Study", columns="Metric", values="Result"), use_container_width=True)
-            st.subheader("Evidence audit (verify before clinical use)")
-            st.dataframe(df, use_container_width=True, hide_index=True)
-            st.download_button("Download detailed evidence CSV", df.to_csv(index=False).encode("utf-8-sig"),
-                               "clinical_evidence_audit.csv", "text/csv")
+            for metric in selected_metrics:
+
+                    metric_data = group[
+                        group["Metric"] == metric
+                    ]
+
+                    if metric_data.empty:
+                        row[metric] = "Not found"
+                        row[f"{metric} | Validation"] = "NOT_FOUND"
+                        row[f"{metric} | Evidence"] = ""
+                        continue
+
+                    # Only accept measurements with a matched source quote
+                    valid = metric_data[
+                        metric_data["Validation"]
+                        == "QUOTE_MATCHED—REVIEW_CONTEXT"
+                    ]
+
+                    if len(metric_data) == 1 and len(valid) == 1:
+                        row[metric] = valid.iloc[0]["Value"]
+
+                    elif len(valid) > 0:
+                        row[metric] = "Multiple candidates — review"
+
+                    else:
+                        row[metric] = "Not established"
+
+                    # Retain all validation statuses
+                    row[f"{metric} | Validation"] = "; ".join(
+                        metric_data["Validation"]
+                        .dropna()
+                        .astype(str)
+                        .unique()
+                    )
+
+                    # Retain all source quotations
+                    row[f"{metric} | Evidence"] = " || ".join(
+                        metric_data["Evidence Quote"]
+                        .dropna()
+                        .astype(str)
+                        .loc[lambda x: x.str.strip() != ""]
+                        .unique()
+                    )
+
+                audit_wide.append(row)
+
+            audit_wide_df = pd.DataFrame(audit_wide)
+
+            st.dataframe(
+                audit_wide_df,
+                use_container_width=True,
+                hide_index=True
+            )
+
+            st.download_button(
+                "Download evidence audit CSV",
+                audit_wide_df.to_csv(index=False).encode("utf-8-sig"),
+                "clinical_evidence_audit.csv",
+                "text/csv"
+            )
+
             st.download_button("Download summary CSV", summary.to_csv(index=False).encode("utf-8-sig"),
                                "clinical_evidence_summary.csv", "text/csv")
 
