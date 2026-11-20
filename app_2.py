@@ -180,7 +180,7 @@ def pubmed_author_search(name, keywords, limit):
             last = a.findtext("LastName") or ""
             if last:
                 authors.append((first + " " + last).strip())
- if len(parts) >= 2:
+        if len(parts) >= 2:
             requested_first = parts[0].casefold()
             requested_last = parts[-1].casefold()
 
